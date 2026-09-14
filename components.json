@@ -1,0 +1,400 @@
+{
+  "wire": {
+    "style": "path",
+    "symbol": "short"
+  },
+  "resistor": {
+    "style": "path",
+    "symbol": "R"
+  },
+  "variable_resistor": {
+    "style": "path",
+    "symbol": "vR"
+  },
+  "potentiometer": {
+    "style": "path",
+    "symbol": "pR"
+  },
+  "photoresistor": {
+    "style": "path",
+    "symbol": "phR"
+  },
+  "thermistor": {
+    "style": "path",
+    "symbol": "thR"
+  },
+  "capacitor": {
+    "style": "path",
+    "symbol": "C"
+  },
+  "polar_capacitor": {
+    "style": "path",
+    "symbol": "pC"
+  },
+  "variable_capacitor": {
+    "style": "path",
+    "symbol": "vC"
+  },
+  "inductor": {
+    "style": "path",
+    "symbol": "L"
+  },
+  "variable_inductor": {
+    "style": "path",
+    "symbol": "vL"
+  },
+  "diode": {
+    "style": "path",
+    "symbol": "D"
+  },
+  "zener_diode": {
+    "style": "path",
+    "symbol": "zD"
+  },
+  "schottky_diode": {
+    "style": "path",
+    "symbol": "sD"
+  },
+  "led": {
+    "style": "path",
+    "symbol": "LED"
+  },
+  "photodiode": {
+    "style": "path",
+    "symbol": "pD"
+  },
+  "battery": {
+    "style": "path",
+    "symbol": "battery"
+  },
+  "battery2": {
+    "style": "path",
+    "symbol": "battery2"
+  },
+  "dc_voltage_source": {
+    "style": "path",
+    "symbol": "vsourceDC"
+  },
+  "dc_current_source": {
+    "style": "path",
+    "symbol": "isourceDC"
+  },
+  "ac_voltage_source": {
+    "style": "path",
+    "symbol": "vsourcesin"
+  },
+  "ac_current_source": {
+    "style": "path",
+    "symbol": "isourcesin"
+  },
+  "controlled_voltage_source": {
+    "style": "path",
+    "symbol": "cvsource"
+  },
+  "controlled_current_source": {
+    "style": "path",
+    "symbol": "cisource"
+  },
+  "fuse": {
+    "style": "path",
+    "symbol": "fuse"
+  },
+  "lamp": {
+    "style": "path",
+    "symbol": "lamp"
+  },
+  "switch_spst": {
+    "style": "path",
+    "symbol": "switch"
+  },
+  "push_button": {
+    "style": "path",
+    "symbol": "nopb"
+  },
+  "ammeter": {
+    "style": "path",
+    "symbol": "ammeter"
+  },
+  "voltmeter": {
+    "style": "path",
+    "symbol": "voltmeter"
+  },
+  "ohmmeter": {
+    "style": "path",
+    "symbol": "ohmmeter"
+  },
+  "ground": {
+    "style": "node",
+    "symbol": "ground",
+    "terminals": [
+      { "name": "north", "displayName": "gnd" }
+    ]
+  },
+  "tlground": {
+    "style": "node",
+    "symbol": "tlground",
+    "terminals": [
+      { "name": "north", "displayName": "gnd" }
+    ]
+  },
+  "sground": {
+    "style": "node",
+    "symbol": "sground",
+    "terminals": [
+      { "name": "north", "displayName": "sgnd" }
+    ]
+  },
+  "cground": {
+    "style": "node",
+    "symbol": "cground",
+    "terminals": [
+      { "name": "north", "displayName": "cgnd" }
+    ]
+  },
+  "vcc": {
+    "style": "node",
+    "symbol": "vcc",
+    "terminals": [
+      { "name": "south", "displayName": "vcc" }
+    ]
+  },
+  "vdd": {
+    "style": "node",
+    "symbol": "vdd",
+    "terminals": [
+      { "name": "south", "displayName": "vdd" }
+    ]
+  },
+  "vee": {
+    "style": "node",
+    "symbol": "vee",
+    "terminals": [
+      { "name": "north", "displayName": "vee" }
+    ]
+  },
+  "vss": {
+    "style": "node",
+    "symbol": "vss",
+    "terminals": [
+      { "name": "north", "displayName": "vss" }
+    ]
+  },
+  "nmos": {
+    "style": "node",
+    "symbol": "nmos",
+    "args": "circuitikz/transistors/arrow pos=end, circuitikz/tripoles/mos style/arrows",
+    "terminals": [
+      { "name": "drain" },
+      { "name": "source" },
+      { "name": "gate" }
+    ]
+  },
+  "nmos4t": {
+    "style": "node",
+    "symbol": "nfet",
+    "args": "circuitikz/transistors/arrow pos=end, circuitikz/tripoles/mos style/arrows",
+    "terminals": [
+      { "name": "drain" },
+      { "name": "source" },
+      { "name": "gate" },
+      { "name": "bulk" }      
+    ]
+  },  
+  "nmos4td": {
+    "style": "node",
+    "symbol": "nigfetd",
+    "args": "circuitikz/transistors/arrow pos=end, circuitikz/tripoles/mos style/arrows",
+    "terminals": [
+      { "name": "drain" },
+      { "name": "source" },
+      { "name": "gate" },
+      { "name": "bulk" }      
+    ]
+  },    
+  "pmos": {
+    "style": "node",
+    "symbol": "pmos",
+    "args": "circuitikz/transistors/arrow pos=end, circuitikz/tripoles/mos style/arrows",
+    "terminals": [
+      { "name": "source" },
+      { "name": "drain" },
+      { "name": "gate" }
+    ]
+  },
+  "pmos4t": {
+    "style": "node",
+    "symbol": "pfet",
+    "args": "circuitikz/transistors/arrow pos=end, circuitikz/tripoles/mos style/arrows",
+    "terminals": [
+      { "name": "drain" },
+      { "name": "source" },
+      { "name": "gate" },
+      { "name": "bulk" }      
+    ]
+  },  
+  "pmos4td": {
+    "style": "node",
+    "symbol": "pigfetd",
+    "args": "circuitikz/transistors/arrow pos=end, circuitikz/tripoles/mos style/arrows",
+    "terminals": [
+      { "name": "drain" },
+      { "name": "source" },
+      { "name": "gate" },
+      { "name": "bulk" }      
+    ]
+  },   
+  "npn": {
+    "style": "node",
+    "symbol": "npn",
+    "terminals": [
+      { "name": "collector" },
+      { "name": "base" },
+      { "name": "emitter" }
+    ]
+  },
+  "pnp": {
+    "style": "node",
+    "symbol": "pnp",
+    "terminals": [
+      { "name": "collector" },
+      { "name": "base" },
+      { "name": "emitter" }
+    ]
+  },
+  "njfet": {
+    "style": "node",
+    "symbol": "njfet",
+    "terminals": [
+      { "name": "drain" },
+      { "name": "source" },
+      { "name": "gate" }
+    ]
+  },
+  "pjfet": {
+    "style": "node",
+    "symbol": "pjfet",
+    "terminals": [
+      { "name": "drain" },
+      { "name": "source" },
+      { "name": "gate" }
+    ]
+  },
+  "igbt": {
+    "style": "node",
+    "symbol": "igbt",
+    "terminals": [
+      { "name": "collector" },
+      { "name": "gate" },
+      { "name": "emitter" }
+    ]
+  },
+  "opamp": {
+    "style": "node",
+    "symbol": "op amp",
+    "terminals": [
+      { "name": "out" },
+      { "name": "+" },
+      { "name": "-" },
+      { "name": "up", "displayName": "+vcc" },
+      { "name": "down", "displayName": "-vcc" }
+    ]
+  },
+  "fd_opamp": {
+    "style": "node",
+    "symbol": "fd op amp",
+    "terminals": [
+      { "name": "out+" },
+      { "name": "out-" },
+      { "name": "+" },
+      { "name": "-" },
+      { "name": "up", "displayName": "+vcc" },
+      { "name": "down", "displayName": "-vcc" }
+    ]
+  },
+  "and_gate": {
+    "style": "node",
+    "symbol": "and port",
+    "terminals": [
+      { "name": "in 1" },
+      { "name": "in 2" },
+      { "name": "out" }
+    ]
+  },
+  "nand_gate": {
+    "style": "node",
+    "symbol": "nand port",
+    "terminals": [
+      { "name": "in 1" },
+      { "name": "in 2" },
+      { "name": "out" }
+    ]
+  },
+  "or_gate": {
+    "style": "node",
+    "symbol": "or port",
+    "terminals": [
+      { "name": "in 1" },
+      { "name": "in 2" },
+      { "name": "out" }
+    ]
+  },
+  "nor_gate": {
+    "style": "node",
+    "symbol": "nor port",
+    "terminals": [
+      { "name": "in 1" },
+      { "name": "in 2" },
+      { "name": "out" }
+    ]
+  },
+  "xor_gate": {
+    "style": "node",
+    "symbol": "xor port",
+    "terminals": [
+      { "name": "in 1" },
+      { "name": "in 2" },
+      { "name": "out" }
+    ]
+  },
+  "xnor_gate": {
+    "style": "node",
+    "symbol": "xnor port",
+    "terminals": [
+      { "name": "in 1" },
+      { "name": "in 2" },
+      { "name": "out" }
+    ]
+  },
+  "not_gate": {
+    "style": "node",
+    "symbol": "not port",
+    "terminals": [
+      { "name": "in" },
+      { "name": "out" }
+    ]
+  },
+  "buffer_gate": {
+    "style": "node",
+    "symbol": "buffer port",
+    "terminals": [
+      { "name": "in" },
+      { "name": "out" }
+    ]
+  },
+  "spdt_switch": {
+    "style": "node",
+    "symbol": "spdt",
+    "terminals": [
+      { "name": "in" },
+      { "name": "out 1" },
+      { "name": "out 2" }
+    ]
+  },
+  "antenna": {
+    "style": "node",
+    "symbol": "antenna",
+    "terminals": [
+      { "name": "space" }
+    ]
+  }
+}
