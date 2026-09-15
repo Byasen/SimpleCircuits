@@ -88,7 +88,6 @@ function showTooltips(nodeTooltip, options, event, frozen = false) {
   nodeTooltip.style.display = 'flex';
 }
 
-// Pick = blue "add flow" selection, Edit = gold component-edit selection.
 function pickNode(nodeRef) {
   selectComponent(null);
   toggleSelectedNode(nodeRef);
@@ -99,7 +98,6 @@ function editNode(colorKey) {
   selectComponent(colorKey);
 }
 
-// Actionable nodes let the user choose Edit vs Pick; others are pick-only.
 function resolveNodeSelection(nodeTooltip, nodeOption, event) {
   if (!nodeOption?.nodeRef) return;
   if (isActionableElement(nodeOption.colorKey)) {
@@ -164,15 +162,39 @@ export function normalizeColor(str) {
   return s.toLowerCase();
 }
 
+function getColorKey(el, colorToMeta) {
+  const ownFill = normalizeColor(el.getAttribute('fill') || el.style?.fill);
+  const ownStroke = normalizeColor(el.getAttribute('stroke') || el.style?.stroke);
+
+  if (ownFill && colorToMeta[ownFill]) return ownFill;
+  if (ownStroke && colorToMeta[ownStroke]) return ownStroke;
+
+  const parentEl = el.parentElement?.closest('[fill], [stroke]');
+  if (parentEl) {
+    const pFill = normalizeColor(parentEl.getAttribute('fill'));
+    const pStroke = normalizeColor(parentEl.getAttribute('stroke'));
+    if (pFill && colorToMeta[pFill]) return pFill;
+    if (pStroke && colorToMeta[pStroke]) return pStroke;
+  }
+
+  try {
+    const cs = window.getComputedStyle(el);
+    const csFill = normalizeColor(cs.fill);
+    const csStroke = normalizeColor(cs.stroke);
+    if (csFill && colorToMeta[csFill]) return csFill;
+    if (csStroke && colorToMeta[csStroke]) return csStroke;
+  } catch (e) {}
+
+  return null;
+}
+
 export function setupInteractiveSvg(svg) {
   if (!svg) return;
 
   const colorMap = state.colorMap || {};
   if (!Object.keys(colorMap).length) return;
   const nodeTooltip = document.getElementById('nodeTooltip');
-  const secondNodeTooltip = document.getElementById('secondNodeTooltip');
 
-  // Background click deselects
   svg.onclick = (e) => {
     if (e.target === svg || e.target.tagName.toLowerCase() === 'svg') {
       clearTooltips();
@@ -193,7 +215,6 @@ export function setupInteractiveSvg(svg) {
     };
   }
 
-  // Map normalized original keys, updated meta.color, and displayColor -> meta object
   const colorToMeta = {};
   Object.entries(colorMap).forEach(([color, meta]) => {
     const normKey = normalizeColor(color);
@@ -214,78 +235,27 @@ export function setupInteractiveSvg(svg) {
   leafElements.forEach(el => {
     if (el.closest('defs')) return;
 
-    let colorKey = null;
-
-    // 1. Inspect direct and inherited presentation attributes
-    for (const attr of ['stroke', 'fill', 'color']) {
-      const val = el.getAttribute(attr) || el.closest(`[${attr}]`)?.getAttribute(attr);
-      if (val) {
-        const norm = normalizeColor(val);
-        if (norm && colorToMeta[norm]) {
-          colorKey = norm;
-          break;
-        }
-      }
-    }
-
-    // 2. Inspect computed styles if attribute match missing
-    if (!colorKey) {
-      try {
-        const cs = window.getComputedStyle(el);
-        const strokeNorm = normalizeColor(cs.stroke);
-        if (strokeNorm && colorToMeta[strokeNorm]) {
-          colorKey = strokeNorm;
-        } else {
-          const fillNorm = normalizeColor(cs.fill);
-          if (fillNorm && colorToMeta[fillNorm]) {
-            colorKey = fillNorm;
-          } else {
-            const colorNorm = normalizeColor(cs.color);
-            if (colorNorm && colorToMeta[colorNorm]) {
-              colorKey = colorNorm;
-            }
-          }
-        }
-      } catch (e) {}
-    }
-
+    const colorKey = getColorKey(el, colorToMeta);
     if (colorKey && colorToMeta[colorKey]) {
       if (!elementsByColor[colorKey]) elementsByColor[colorKey] = [];
       elementsByColor[colorKey].push(el);
     }
   });
 
-  // Attach direct interactive behaviors to mapped SVG path elements
   Object.entries(elementsByColor).forEach(([colorKey, elements]) => {
     const meta = colorToMeta[colorKey];
     if (!meta) return;
 
     elements.forEach(el => {
-      let strokeVal = el.getAttribute('stroke') || el.style.stroke;
-      let fillVal = el.getAttribute('fill') || el.style.fill;
-      if (!strokeVal && !fillVal) {
-        try {
-          const cs = window.getComputedStyle(el);
-          strokeVal = cs.stroke;
-          fillVal = cs.fill;
-        } catch (e) {}
-      }
+      const fillAttr = el.getAttribute('fill') || el.style?.fill;
+      const isHollow = fillAttr === 'none' || fillAttr === 'transparent';
+      el.dataset.isHollow = isHollow ? 'true' : 'false';
 
-      const hasStroke = Boolean(strokeVal && strokeVal !== 'none' && strokeVal !== 'transparent');
-      const hasFill = Boolean(fillVal && fillVal !== 'none' && fillVal !== 'transparent');
-
-      el.dataset.hasStroke = hasStroke || (!hasStroke && !hasFill) ? 'true' : 'false';
-      el.dataset.hasFill = hasFill ? 'true' : 'false';
-
-      // Apply initial manual/revert display color if present
       const displayColor = meta.displayColor ? `#${meta.displayColor}` : null;
       el.dataset.displayColor = meta.displayColor || '';
       if (displayColor) {
-        if (el.dataset.hasStroke === 'true') el.style.stroke = displayColor;
-        if (el.dataset.hasFill === 'true') {
-          el.style.fill = displayColor;
-          el.style.fillOpacity = '1.0';
-        }
+        if (!isHollow) el.style.fill = displayColor;
+        el.style.stroke = displayColor;
       }
 
       el.style.cursor = 'pointer';
@@ -326,29 +296,25 @@ export function setupInteractiveSvg(svg) {
         });
       }
 
-      // Hover feedback directly on the element
       el.addEventListener('mouseenter', () => {
         if (el.dataset.selected === 'true' || el.dataset.pickedNode === 'true') return;
-        if (el.dataset.hasStroke === 'true') el.style.stroke = GOLDEN_COLOR;
-        if (el.dataset.hasFill === 'true') {
-          el.style.fill = GOLDEN_COLOR;
-          el.style.fillOpacity = '1.0';
-        }
+        if (el.dataset.isHollow !== 'true') el.style.fill = GOLDEN_COLOR;
+        el.style.stroke = GOLDEN_COLOR;
         el.style.filter = HOVER_GLOW;
       });
 
       el.addEventListener('mouseleave', () => {
         if (el.dataset.selected === 'true' || el.dataset.pickedNode === 'true') return;
         const revertColor = el.dataset.displayColor ? `#${el.dataset.displayColor}` : '';
-        if (el.dataset.hasStroke === 'true') el.style.stroke = revertColor;
-        if (el.dataset.hasFill === 'true') {
+        if (el.dataset.isHollow !== 'true') {
           el.style.fill = revertColor;
-          el.style.fillOpacity = revertColor ? '1.0' : '';
+        } else {
+          el.style.fill = 'none';
         }
+        el.style.stroke = revertColor;
         el.style.filter = '';
       });
 
-      // Selection & device modal trigger
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -356,15 +322,11 @@ export function setupInteractiveSvg(svg) {
         const defaultLabel = meta.label ? `${meta.nodeRef} (${meta.label})` : meta.nodeRef;
         const activeColorKey = meta.color || colorKey;
 
-        // Multiple overlapping nodes - let the user choose which node first.
         if (options.length > 1) {
           showTooltips(nodeTooltip, options, e, true);
           return;
         }
 
-        // Prefer the clicked element's own node (works for non-actionable
-        // nodes too); fall back to the point scan when a component's hit
-        // area is on top of the node.
         const nodeOption = meta.nodeRef
           ? { nodeRef: meta.nodeRef, colorKey: activeColorKey, label: defaultLabel }
           : options[0] || null;
@@ -402,7 +364,6 @@ export function setupInteractiveSvg(svg) {
     });
   });
 
-  // Re-apply selection state to SVG paths
   if (state.selectedComponentColor) {
     applySelectionHighlight(state.selectedComponentColor);
   }
@@ -423,22 +384,18 @@ export function applySelectedNodesHighlight() {
     el.dataset.pickedNode = isPicked ? 'true' : 'false';
 
     if (isPicked) {
-      if (el.dataset.hasStroke === 'true') {
-        el.style.stroke = NODE_PICK_BORDER;
-        el.style.strokeWidth = '2.5';
-      }
-      if (el.dataset.hasFill === 'true') {
-        el.style.fill = NODE_PICK_COLOR;
-        el.style.fillOpacity = '1.0';
-      }
+      if (el.dataset.isHollow !== 'true') el.style.fill = NODE_PICK_COLOR;
+      el.style.stroke = NODE_PICK_BORDER;
+      el.style.strokeWidth = '2.5';
       el.style.filter = NODE_PICK_GLOW;
     } else if (el.dataset.selected !== 'true') {
       const revertColor = el.dataset.displayColor ? `#${el.dataset.displayColor}` : '';
-      if (el.dataset.hasStroke === 'true') el.style.stroke = revertColor;
-      if (el.dataset.hasFill === 'true') {
+      if (el.dataset.isHollow !== 'true') {
         el.style.fill = revertColor;
-        el.style.fillOpacity = revertColor ? '1.0' : '';
+      } else {
+        el.style.fill = 'none';
       }
+      el.style.stroke = revertColor;
       el.style.strokeWidth = '';
       el.style.filter = '';
     }
@@ -448,14 +405,16 @@ export function applySelectedNodesHighlight() {
 export function applySelectionHighlight(selectedColorKey) {
   const container = dom.output || document;
 
-  // Clear previous selection highlights from paths and reset to displayColor
   container.querySelectorAll('[data-color-key]').forEach(el => {
     el.dataset.selected = 'false';
     if (el.dataset.pickedNode === 'true') return;
     const revertColor = el.dataset.displayColor ? `#${el.dataset.displayColor}` : '';
-    el.style.stroke = el.dataset.hasStroke === 'true' ? revertColor : '';
-    el.style.fill = el.dataset.hasFill === 'true' ? revertColor : '';
-    el.style.fillOpacity = el.dataset.hasFill === 'true' && revertColor ? '1.0' : '';
+    if (el.dataset.isHollow !== 'true') {
+      el.style.fill = revertColor;
+    } else {
+      el.style.fill = 'none';
+    }
+    el.style.stroke = revertColor;
     el.style.strokeWidth = '';
     el.style.filter = '';
   });
@@ -465,7 +424,6 @@ export function applySelectionHighlight(selectedColorKey) {
   const colorMap = state.colorMap || {};
   const targetNorm = normalizeColor(selectedColorKey);
 
-  // Collect matching identifiers across original keys, edited meta colors, display colors, and node refs
   const matchingIdentifiers = new Set();
   if (targetNorm) matchingIdentifiers.add(targetNorm);
 
@@ -489,7 +447,6 @@ export function applySelectionHighlight(selectedColorKey) {
     }
   });
 
-  // Apply golden selection highlight directly to target SVG elements
   container.querySelectorAll('[data-color-key]').forEach(el => {
     if (el.dataset.pickedNode === 'true') return;
     const elColorKey = el.getAttribute('data-color-key');
@@ -501,15 +458,9 @@ export function applySelectionHighlight(selectedColorKey) {
       elColorKey === targetNorm
     ) {
       el.dataset.selected = 'true';
-
-      if (el.dataset.hasStroke === 'true') {
-        el.style.stroke = GOLDEN_BORDER;
-        el.style.strokeWidth = '2.5';
-      }
-      if (el.dataset.hasFill === 'true') {
-        el.style.fill = GOLDEN_COLOR;
-        el.style.fillOpacity = '1.0';
-      }
+      if (el.dataset.isHollow !== 'true') el.style.fill = GOLDEN_COLOR;
+      el.style.stroke = GOLDEN_BORDER;
+      el.style.strokeWidth = '2.5';
       el.style.filter = GOLDEN_GLOW;
     }
   });

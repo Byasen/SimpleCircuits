@@ -132,7 +132,6 @@ function colorizeLine(rest, colorKey) {
   const cleanColorKey = colorKey ? colorKey.replace(/^#/, '') : '000000';
   const colorDef = `\\definecolor{coloring}{HTML}{${cleanColorKey}}`;
 
-  // Safely normalize \draw and prevent duplicate [coloring] tags or stacked attributes
   const formattedRest = rest.replace(/\b\\draw(?:\s*\[coloring\])*/g, '\\draw [coloring]');
 
   if (formattedRest.includes('\\begin{scope}')) {
@@ -145,11 +144,19 @@ function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+export function parseEndpointOption(opts) {
+  if (!opts) return '';
+  const match = opts.match(/(?:^|,)\s*(\*-\*|o-o|\*-o|o-\*|\*-|-\*|o-|-o)\s*(?:,|$)/);
+  return match ? match[1] : '';
+}
+
 function matchesPathSymbol(opts, symbol) {
-  const trimmed = opts.trim();
-  if (trimmed === symbol) return true;
+  let cleanOpts = opts.replace(/(?:^|,)\s*(\*-\*|o-o|\*-o|o-\*|\*-|-\*|o-|-o)\s*(?:,|$)/g, ',').trim();
+  cleanOpts = cleanOpts.replace(/^,|,$/g, '').trim();
+
+  if (cleanOpts === symbol) return true;
   const prefix = symbol.toLowerCase();
-  const lower = trimmed.toLowerCase();
+  const lower = cleanOpts.toLowerCase();
   if (lower.startsWith(prefix)) {
     const nextChar = lower.charAt(prefix.length);
     return nextChar === '=' || nextChar === ',' || nextChar === ' ' || nextChar === '[' || nextChar === '';
@@ -407,12 +414,14 @@ export function parseLatex(texString) {
         if (cfg.style === 'path') {
           if (matchesPathSymbol(opts, cfg.symbol)) {
             const { label, labelPosition, labelSize } = parseLabelOption(opts);
+            const endpoints = parseEndpointOption(opts);
 
             components.push({
               style: 'path',
               type: typeKey,
               start,
               end,
+              endpoints,
               xscale: scopeTransforms.xscale,
               yscale: scopeTransforms.yscale,
               rotate: scopeTransforms.rotate,

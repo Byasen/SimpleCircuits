@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { dom } from './main.js';
 import { fetchRenderedMetadata, getComponentsConfig, populateComponentDropdown } from './tikz.js';
 import { normalizeColor, announceSelection, clearTooltips, applySelectedNodesHighlight } from './interactive.js';
-import { processLatexCode, insertCircuitLine, updateLineInTex, deleteLineInTex, COLOR_PREFIX_RE } from './latex.js';
+import { processLatexCode, insertCircuitLine, updateLineInTex, deleteLineInTex, COLOR_PREFIX_RE, parseEndpointOption } from './latex.js';
 
 let activeNodeMode = 'simple';
 let activeNodeType = 'Between';
@@ -152,11 +152,20 @@ export function deleteComponent(colorKey) {
 // N0, component terminal pins, and path-generated end nodes have no
 // standalone editable line, so they can only be picked, never edited.
 function isEditableNode(nodeRef) {
-  if (!nodeRef) return true;
+  if (!nodeRef || typeof nodeRef !== 'string') return false;
   if (nodeRef === 'N0' || nodeRef.includes('.')) return false;
+
+  // Nodes with an explicit coordinate definition in parsedData are editable
+  const hasStandaloneDefinition = state.parsedData?.nodes?.some(
+    node => node.name === nodeRef && node.lineIndex !== undefined && node.lineIndex !== null
+  );
+  if (hasStandaloneDefinition) return true;
+
+  // Check if node is generated inline by a path component without its own standalone definition
   const isPathGeneratedNode = state.parsedData?.components?.some(component =>
     component.style === 'path' && component.end === nodeRef
   );
+
   return !isPathGeneratedNode;
 }
 
@@ -303,7 +312,10 @@ function parseTeXLine(lineText) {
       const opts = match[2].trim();
       let targetStr = match[3].trim();
 
-      const symbol = opts.split(/[=,]/)[0].trim();
+      const endpoints = parseEndpointOption(opts);
+      let cleanOpts = opts.replace(/(?:^|,)\s*(\*-\*|o-o|\*-o|o-\*|\*-|-\*|o-|-o)\s*(?:,|$)/g, ',').trim();
+      cleanOpts = cleanOpts.replace(/^,|,$/g, '').trim();
+      const symbol = cleanOpts.split(/[=,]/)[0].trim();
       const { label, labelPosition, labelSize } = parseLabelOption(opts);
 
       let coordName = '';
@@ -335,6 +347,7 @@ function parseTeXLine(lineText) {
         kind: 'path',
         startNode,
         symbol,
+        endpoints,
         typeKey,
         label,
         labelPosition,
@@ -472,6 +485,7 @@ function buildPathLine(p) {
   const configs = getComponentsConfig();
   const cfg = configs[p.typeKey] || { symbol: 'short' };
   const symbol = cfg.symbol || 'short';
+  const endpointArg = p.endpoints && p.endpoints !== '-' ? `,${p.endpoints}` : '';
   const labelArg = p.labelPosition === 'above'
     ? `,l^=${p.labelSize || '\\normalsize'}{${p.label || ''}}`
     : p.labelPosition === 'below'
@@ -481,7 +495,7 @@ function buildPathLine(p) {
   const base = p.baseNode || p.startNode;
   let targetStr = '';
 
-  if (p.hasCalc || p.coordName || p.xlen !== 0 || p.ylen !== 0) {
+  if (p.hasCalc || p.coordName) {
     targetStr = `($(${base})+(${p.xlen},${p.ylen})$)`;
     if (p.coordName) {
       targetStr += ` coordinate (${p.coordName})`;
@@ -490,7 +504,7 @@ function buildPathLine(p) {
     targetStr = `(${base})`;
   }
 
-  const drawStr = `\\draw [coloring] (${p.startNode}) to[${symbol}${labelArg}] ${targetStr};`;
+  const drawStr = `\\draw [coloring] (${p.startNode}) to[${symbol}${endpointArg}${labelArg}] ${targetStr};`;
   return buildScopeWrapper(drawStr, p);
 }
 
@@ -592,14 +606,15 @@ export function updateEditPanel(forceRefresh = false) {
   // 1. Path Component Form
   if (parsed.kind === 'path') {
     const selectedColor = getSelectedColorMeta()?.displayColor || '000000';
-    if (dom.editPanelTitle) dom.editPanelTitle.textContent = parsed.hasCalc || parsed.coordName ? 'Edit Directional Component' : 'Edit Directional Component (Start-End)';
+    const isStartEnd = !parsed.hasCalc && !parsed.coordName;
+    if (dom.editPanelTitle) dom.editPanelTitle.textContent = isStartEnd ? 'Edit Directional Component (Start-End)' : 'Edit Directional Component';
     dom.editPanelBody.innerHTML = `
-      <div class="form-group">
-        <label class="form-label">Label Text</label>
-        <input type="text" id="editPathLabel" class="form-input" value="${parsed.label}" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">Label Position</label>
+    <div class="form-group">
+    <label class="form-label">Label Text</label>
+    <input type="text" id="editPathLabel" class="form-input" value="${parsed.label}" />
+    </div>
+    <div class="form-group">
+    <label class="form-label">Label Position</label>
         <select id="editPathLabelPosition" class="form-select">
           <option value="above" ${parsed.labelPosition !== 'below' ? 'selected' : ''}>Above</option>
           <option value="below" ${parsed.labelPosition === 'below' ? 'selected' : ''}>Below</option>
@@ -617,13 +632,28 @@ export function updateEditPanel(forceRefresh = false) {
         </select>
       </div>
       <div class="form-group">
+        <label class="form-label">Endpoint Style</label>
+        <select id="editPathEndpoints" class="form-select">
+          <option value="" ${!parsed.endpoints || parsed.endpoints === '-' ? 'selected' : ''}>Plain/Default (-)</option>
+          <option value="*-*" ${parsed.endpoints === '*-*' ? 'selected' : ''}>Both Filled (*-*)</option>
+          <option value="o-o" ${parsed.endpoints === 'o-o' ? 'selected' : ''}>Both Hollow (o-o)</option>
+          <option value="*-" ${parsed.endpoints === '*-' ? 'selected' : ''}>Start Filled (*-)</option>
+          <option value="-*" ${parsed.endpoints === '-*' ? 'selected' : ''}>End Filled (-*)</option>
+          <option value="o-" ${parsed.endpoints === 'o-' ? 'selected' : ''}>Start Hollow (o-)</option>
+          <option value="-o" ${parsed.endpoints === '-o' ? 'selected' : ''}>End Hollow (-o)</option>
+          <option value="*-o" ${parsed.endpoints === '*-o' ? 'selected' : ''}>Filled-Hollow (*-o)</option>
+          <option value="o-*" ${parsed.endpoints === 'o-*' ? 'selected' : ''}>Hollow-Filled (o-*)</option>
+        </select>
+      </div>
+      ${!isStartEnd ? `
+      <div class="form-group">
         <label class="form-label">X Direction</label>
         <input type="number" step="0.1" id="editPathXLen" class="form-input" value="${Number(parsed.xlen).toFixed(1)}" />
       </div>
       <div class="form-group">
         <label class="form-label">Y Direction</label>
         <input type="number" step="0.1" id="editPathYLen" class="form-input" value="${Number(parsed.ylen).toFixed(1)}" />
-      </div>
+      </div>` : ''}
       <div class="form-group">
         <label class="form-label">X Scale</label>
         <input type="number" step="0.1" id="editCompXScale" class="form-input" value="${Number(parsed.xscale).toFixed(1)}" />
@@ -647,12 +677,15 @@ export function updateEditPanel(forceRefresh = false) {
 
     const applyPathChanges = () => {
       const color = document.getElementById('editCompColor')?.value || selectedColor;
+      const endpoints = document.getElementById('editPathEndpoints')?.value || '';
       const label = document.getElementById('editPathLabel')?.value.trim() ?? parsed.label;
       const labelPosition = document.getElementById('editPathLabelPosition')?.value || parsed.labelPosition;
       const labelSize = document.getElementById('editPathLabelSize')?.value || parsed.labelSize;
-      const rawX = parseFloat(document.getElementById('editPathXLen')?.value);
+      const editXEl = document.getElementById('editPathXLen');
+      const editYEl = document.getElementById('editPathYLen');
+      const rawX = editXEl ? parseFloat(editXEl.value) : parsed.xlen;
       const xlen = !isNaN(rawX) ? rawX : parsed.xlen;
-      const rawY = parseFloat(document.getElementById('editPathYLen')?.value);
+      const rawY = editYEl ? parseFloat(editYEl.value) : parsed.ylen;
       const ylen = !isNaN(rawY) ? rawY : parsed.ylen;
       const xscale = parseFloat(document.getElementById('editCompXScale')?.value || parsed.xscale);
       const yscale = parseFloat(document.getElementById('editCompYScale')?.value || parsed.yscale);
@@ -660,6 +693,7 @@ export function updateEditPanel(forceRefresh = false) {
 
       const newLine = applyEditColor(buildPathLine({
         ...parsed,
+        endpoints,
         label,
         labelPosition,
         labelSize,
@@ -674,7 +708,7 @@ export function updateEditPanel(forceRefresh = false) {
       processLatexCode({ skipRender: false, preserveSelection: true });
     };
 
-    ['editCompColor', 'editPathLabel', 'editPathLabelPosition', 'editPathLabelSize', 'editPathXLen', 'editPathYLen', 'editCompXScale', 'editCompYScale', 'editCompRotate']
+    ['editCompColor', 'editPathEndpoints', 'editPathLabel', 'editPathLabelPosition', 'editPathLabelSize', 'editPathXLen', 'editPathYLen', 'editCompXScale', 'editCompYScale', 'editCompRotate']
       .forEach(id => document.getElementById(id)?.addEventListener('input', applyPathChanges));
 
     document.getElementById('editCompDeleteBtn')?.addEventListener('click', () => deleteComponent(state.selectedComponentColor));
@@ -877,8 +911,6 @@ export function updateEditPanel(forceRefresh = false) {
 // Add Device & Node Modal Listeners
 // ---------------------------------------------------------------------
 
-// Both choice panels are shown together (stacked vertically) as soon as
-// one or two nodes are picked; options are greyed out based on the count.
 function showAddChoicePanels() {
   if (state.hideNodes) {
     state.hideNodes = false;

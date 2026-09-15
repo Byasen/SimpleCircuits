@@ -2,7 +2,7 @@
   "wire": {
     "style": "path",
     "symbol": "short"
-  },
+  },  
   "resistor": {
     "style": "path",
     "symbol": "R"
@@ -179,6 +179,17 @@
       { "name": "north", "displayName": "vss" }
     ]
   },
+  "jump_cross": {
+    "style": "node",
+    "symbol": "jump crossing",
+    "terminals": [
+      { "name": "center", "displayName": "center" },
+      { "name": "north", "displayName": "north" },
+      { "name": "south", "displayName": "south" },
+      { "name": "east", "displayName": "east" },
+      { "name": "west", "displayName": "west" }
+    ]
+  },  
   "nmos": {
     "style": "node",
     "symbol": "nmos",
