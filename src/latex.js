@@ -6,6 +6,8 @@ import { normalizeColor } from './interactive.js';
 
 let lastTexValue = '';
 const TEX_STORAGE_KEY = 'circuitio.texCode';
+const TEX_HISTORY_STORAGE_KEY = 'circuitio.texHistory';
+const MAX_TEX_HISTORY = 20;
 
 export function saveTexCode() {
   try {
@@ -29,10 +31,39 @@ function updateHistoryButtons() {
   if (dom.redoBtn) dom.redoBtn.disabled = state.texRedoStack.length === 0;
 }
 
+function saveTexHistory() {
+  try {
+    localStorage.setItem(TEX_HISTORY_STORAGE_KEY, JSON.stringify({
+      currentValue: dom.latexInput.value,
+      undo: state.texUndoStack.slice(-MAX_TEX_HISTORY),
+      redo: state.texRedoStack.slice(-MAX_TEX_HISTORY)
+    }));
+  } catch (error) {
+    console.warn('Could not save TeX history to local storage:', error);
+  }
+}
+
+function loadTexHistory(currentValue) {
+  try {
+    const savedHistory = JSON.parse(localStorage.getItem(TEX_HISTORY_STORAGE_KEY) || 'null');
+    if (!savedHistory || savedHistory.currentValue !== currentValue) return null;
+    if (!Array.isArray(savedHistory.undo) || !Array.isArray(savedHistory.redo)) return null;
+
+    return {
+      undo: savedHistory.undo.filter(value => typeof value === 'string').slice(-MAX_TEX_HISTORY),
+      redo: savedHistory.redo.filter(value => typeof value === 'string').slice(-MAX_TEX_HISTORY)
+    };
+  } catch (error) {
+    console.warn('Could not load TeX history from local storage:', error);
+    return null;
+  }
+}
+
 export function initializeTexHistory() {
   lastTexValue = dom.latexInput.value;
-  state.texUndoStack = [];
-  state.texRedoStack = [];
+  const savedHistory = loadTexHistory(lastTexValue);
+  state.texUndoStack = savedHistory?.undo || [];
+  state.texRedoStack = savedHistory?.redo || [];
   updateHistoryButtons();
 }
 
@@ -40,16 +71,21 @@ export function recordTexEdit() {
   const nextValue = dom.latexInput.value;
   if (nextValue === lastTexValue) return;
   state.texUndoStack.push(lastTexValue);
+  state.texUndoStack = state.texUndoStack.slice(-MAX_TEX_HISTORY);
   state.texRedoStack = [];
   lastTexValue = nextValue;
+  saveTexHistory();
   updateHistoryButtons();
 }
 
 export function undoTexEdit() {
   if (!state.texUndoStack.length) return;
   state.texRedoStack.push(dom.latexInput.value);
+  state.texRedoStack = state.texRedoStack.slice(-MAX_TEX_HISTORY);
   dom.latexInput.value = state.texUndoStack.pop();
   lastTexValue = dom.latexInput.value;
+  saveTexCode();
+  saveTexHistory();
   updateHistoryButtons();
   processLatexCode();
 }
@@ -57,8 +93,11 @@ export function undoTexEdit() {
 export function redoTexEdit() {
   if (!state.texRedoStack.length) return;
   state.texUndoStack.push(dom.latexInput.value);
+  state.texUndoStack = state.texUndoStack.slice(-MAX_TEX_HISTORY);
   dom.latexInput.value = state.texRedoStack.pop();
   lastTexValue = dom.latexInput.value;
+  saveTexCode();
+  saveTexHistory();
   updateHistoryButtons();
   processLatexCode();
 }
