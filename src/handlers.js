@@ -1,32 +1,88 @@
 import { state } from './state.js';
 import { dom } from './main.js';
 import { fetchRenderedMetadata, getComponentsConfig, populateComponentDropdown } from './tikz.js';
-import { normalizeColor, announceSelection, clearTooltips } from './interactive.js';
+import { normalizeColor, announceSelection, clearTooltips, applySelectedNodesHighlight } from './interactive.js';
 import { processLatexCode, insertCircuitLine, updateLineInTex, deleteLineInTex, COLOR_PREFIX_RE } from './latex.js';
 
-let activeModalNode = null;
 let activeNodeMode = 'simple';
 let activeNodeType = 'Between';
-let activeNodeSelectionTarget = null;
 let preferredPathMode = 'new';
 
-function hasMultipleNodes() {
-  const nodes = state.parsedData?.availableNodes || [];
-  return new Set(nodes.filter(Boolean)).size >= 2;
+function getSelectedNodes() {
+  return state.selectedNodes || [];
+}
+
+function hasTwoSelectedNodes() {
+  return getSelectedNodes().length === 2;
+}
+
+// ---------------------------------------------------------------------
+// Node selection for Add flows (selection happens on the canvas, before
+// the Add Component / Add Node panel is opened)
+// ---------------------------------------------------------------------
+
+export function toggleSelectedNode(nodeRef) {
+  if (!nodeRef) return;
+  const list = state.selectedNodes || (state.selectedNodes = []);
+  const idx = list.indexOf(nodeRef);
+  if (idx !== -1) {
+    list.splice(idx, 1);
+  } else {
+    list.push(nodeRef);
+    if (list.length > 2) list.shift();
+  }
+  refreshSelectedNodesUI();
+}
+
+export function clearSelectedNodes() {
+  state.selectedNodes = [];
+  refreshSelectedNodesUI();
+}
+
+function refreshSelectedNodesUI() {
+  applySelectedNodesHighlight();
+  if (getSelectedNodes().length > 0) {
+    showAddChoicePanels();
+  } else {
+    hideAddPanels();
+  }
+}
+
+function syncNodeFieldsFromSelection() {
+  const [first = '', second = ''] = getSelectedNodes();
+  if (dom.modalCurrentNode) dom.modalCurrentNode.value = first;
+  if (dom.addNodeCurrentNode) dom.addNodeCurrentNode.value = first;
+  if (dom.addNodeRef2Input) dom.addNodeRef2Input.value = second;
+  const targetNodeEl = document.getElementById('modalTargetNodeInput');
+  if (targetNodeEl) targetNodeEl.value = second;
 }
 
 function updateMainChoiceAvailability() {
-  const requiresTwoNodes = [
+  const oneNodeButtons = [
+    'modalChoiceAddNodeComponentBtn',
+    'modalChoiceAddPathNewNodeBtn',
+    'modalChoiceAddTextComponentBtn',
+    'modalChoiceAddSimpleNodeBtn'
+  ];
+  const twoNodeButtons = [
     'modalChoiceAddPathBetweenNodesBtn',
     'modalChoiceAddNodeBetweenBtn',
     'modalChoiceAddNodeCornerBtn'
   ];
-  const enabled = hasMultipleNodes();
-  requiresTwoNodes.forEach(id => {
+  const count = getSelectedNodes().length;
+  oneNodeButtons.forEach(id => {
     const button = document.getElementById(id);
     if (!button) return;
-    button.disabled = !enabled;
-    button.title = enabled ? '' : 'At least two nodes are required';
+    button.disabled = count !== 1;
+    if (count === 1) delete button.dataset.tooltip;
+    else button.dataset.tooltip = 'Active on one node selection';
+  });
+  twoNodeButtons.forEach(id => {
+    const button = document.getElementById(id);
+    if (!button) return;
+    button.disabled = count !== 2;
+    if (count === 2) delete button.dataset.tooltip;
+    else button.dataset.tooltip = 'Active on two nodes selection';
   });
 }
 
@@ -93,6 +149,17 @@ export function deleteComponent(colorKey) {
   processLatexCode();
 }
 
+// N0, component terminal pins, and path-generated end nodes have no
+// standalone editable line, so they can only be picked, never edited.
+function isEditableNode(nodeRef) {
+  if (!nodeRef) return true;
+  if (nodeRef === 'N0' || nodeRef.includes('.')) return false;
+  const isPathGeneratedNode = state.parsedData?.components?.some(component =>
+    component.style === 'path' && component.end === nodeRef
+  );
+  return !isPathGeneratedNode;
+}
+
 export function isActionableElement(colorKey) {
   if (!colorKey) return false;
   const targetNorm = normalizeColor(colorKey);
@@ -104,6 +171,8 @@ export function isActionableElement(colorKey) {
 
   let lineIndex = meta.lineNumber;
   let targetNodeRef = meta.nodeRef || meta.node?.name;
+
+  if (targetNodeRef && !isEditableNode(targetNodeRef)) return false;
 
   if (targetNodeRef) {
     if (lineIndex === undefined || lineIndex === null) {
@@ -129,11 +198,6 @@ export function isActionableElement(colorKey) {
 
 export function selectComponent(colorKey) {
   if (!colorKey || !isActionableElement(colorKey)) {
-    cancelNodeSelection();
-    const pathModeSelect = document.getElementById('modalTargetModeSelect');
-    if (pathModeSelect) pathModeSelect.value = 'new';
-    const pathPickButton = document.getElementById('modalPickTargetNodeBtn');
-    if (pathPickButton) pathPickButton.style.display = 'none';
     state.selectedComponentColor = null;
     clearTooltips();
   } else {
@@ -141,141 +205,10 @@ export function selectComponent(colorKey) {
     const targetNorm = normalizeColor(colorKey);
     const exists = Object.keys(state.colorMap || {}).some(k => normalizeColor(k) === targetNorm);
     state.selectedComponentColor = exists ? colorKey : null;
+    if (state.selectedComponentColor) clearSelectedNodes();
   }
   updateEditPanel(true);
   announceSelection(state.selectedComponentColor);
-}
-
-export function isSelectingNode() {
-  return Boolean(activeNodeSelectionTarget);
-}
-
-export function isSelectingSecondNode() {
-  return isSelectingNode();
-}
-
-export function cancelNodeSelection() {
-  activeNodeSelectionTarget = null;
-  const buttons = [
-    dom.modalPickCurrentNodeBtn,
-    document.getElementById('modalPickTargetNodeBtn'),
-    dom.addNodePickStartBtn,
-    dom.addNodePickBtn,
-    ...document.querySelectorAll('#modalPickCurrentNodeBtn')
-  ];
-  buttons.forEach(btn => {
-    if (btn) {
-      btn.classList.remove('is-active');
-      btn.setAttribute('aria-pressed', 'false');
-      btn.textContent = 'Pick Node';
-    }
-  });
-}
-
-export function toggleNodeSelection(target) {
-  if (activeNodeSelectionTarget === target) {
-    cancelNodeSelection();
-    return;
-  }
-  beginNodeSelection(target);
-}
-
-export function beginNodeSelection(target) {
-  cancelNodeSelection();
-  activeNodeSelectionTarget = target;
-
-  let btn = null;
-  let input = null;
-
-  if (target === 'modalCurrentNode') {
-    btn = document.getElementById('modalPickCurrentNodeBtn');
-    input = document.getElementById('modalCurrentNode');
-  } else if (target === 'modalTargetNode') {
-    btn = document.getElementById('modalPickTargetNodeBtn');
-    input = document.getElementById('modalTargetNodeInput');
-  } else if (target === 'addNodeCurrentNode') {
-    btn = dom.addNodePickStartBtn;
-    input = dom.addNodeCurrentNode;
-  } else if (target === 'addNodeRef2') {
-    btn = dom.addNodePickBtn;
-    input = dom.addNodeRef2Input;
-  }
-
-  if (btn) {
-    btn.classList.add('is-active');
-    btn.setAttribute('aria-pressed', 'true');
-    btn.textContent = 'Select Node';
-  }
-  if (input) {
-    input.placeholder = 'Select a node in the circuit';
-    input.classList.remove('is-disabled');
-  }
-}
-
-export function beginSecondNodeSelection(target = 'addNode') {
-  if (target === 'path') {
-    toggleNodeSelection('modalTargetNode');
-  } else {
-    toggleNodeSelection('addNodeRef2');
-  }
-}
-
-export function selectSecondNode(nodeRef) {
-  return handleNodePicked(nodeRef);
-}
-
-export function handleNodePicked(nodeRef) {
-  if (!activeNodeSelectionTarget || !nodeRef) return false;
-
-  const target = activeNodeSelectionTarget;
-
-  if (target === 'modalCurrentNode') {
-    activeModalNode = nodeRef;
-    const modalCurrInputs = document.querySelectorAll('#modalCurrentNode');
-    modalCurrInputs.forEach(inp => { inp.value = nodeRef; });
-    if (dom.addNodeCurrentNode) dom.addNodeCurrentNode.value = nodeRef;
-    const targetNodeEl = document.getElementById('modalTargetNodeInput');
-    if (targetNodeEl && targetNodeEl.value === nodeRef) {
-      targetNodeEl.value = '';
-    }
-    cancelNodeSelection();
-    return true;
-  }
-
-  if (target === 'addNodeCurrentNode') {
-    activeModalNode = nodeRef;
-    if (dom.addNodeCurrentNode) dom.addNodeCurrentNode.value = nodeRef;
-    if (dom.modalCurrentNode) dom.modalCurrentNode.value = nodeRef;
-    if (dom.addNodeRef2Input && dom.addNodeRef2Input.value === nodeRef) {
-      dom.addNodeRef2Input.value = '';
-    }
-    cancelNodeSelection();
-    return true;
-  }
-
-  if (target === 'modalTargetNode') {
-    if (nodeRef === activeModalNode) {
-      alert('End node cannot be the same as the start node.');
-      return false;
-    }
-    const targetInput = document.getElementById('modalTargetNodeInput');
-    if (targetInput) targetInput.value = nodeRef;
-    cancelNodeSelection();
-    return true;
-  }
-
-  if (target === 'addNodeRef2') {
-    if (nodeRef === activeModalNode) {
-      alert('End node cannot be the same as the start node.');
-      return false;
-    }
-    if (dom.addNodeRef2Input) dom.addNodeRef2Input.value = nodeRef;
-    cancelNodeSelection();
-    return true;
-  }
-
-  cancelNodeSelection();
-  return false;
 }
 
 function getSelectedColorMeta() {
@@ -609,11 +542,8 @@ export function updateEditPanel(forceRefresh = false) {
 
   const colorMeta = getSelectedColorMeta();
   let lineIndex = colorMeta?.lineNumber;
-  let targetNodeRef = colorMeta?.nodeRef || activeModalNode;
-  const isPathGeneratedNode = targetNodeRef && state.parsedData?.components?.some(component =>
-    component.style === 'path' && component.end === targetNodeRef
-  );
-  const isUneditableNode = targetNodeRef === 'N0' || isPathGeneratedNode || targetNodeRef?.includes('.');
+  let targetNodeRef = colorMeta?.nodeRef;
+  const isUneditableNode = targetNodeRef && !isEditableNode(targetNodeRef);
 
   if (isUneditableNode) {
     dom.editPanel.style.display = 'block';
@@ -631,12 +561,6 @@ export function updateEditPanel(forceRefresh = false) {
     if (targetNodeRef) {
       const nodeDef = state.parsedData?.nodes?.find(n => n.name === targetNodeRef);
       if (nodeDef) lineIndex = nodeDef.lineIndex;
-    }
-    if ((lineIndex === undefined || lineIndex === null) && isPathGeneratedNode) {
-      const generatedBy = state.parsedData?.components?.find(component =>
-        component.style === 'path' && component.end === targetNodeRef
-      );
-      if (generatedBy) lineIndex = generatedBy.lineIndex;
     }
   }
 
@@ -894,6 +818,15 @@ export function updateEditPanel(forceRefresh = false) {
         <input type="number" step="0.5" id="editNodeAbsY" class="form-input" value="${Number(parsed.absY).toFixed(1)}" />
       </div>` : ''}
 
+      ${!isRootNode && parsed.mode === 'corner' ? `
+      <div class="form-group">
+        <label class="form-label">Corner Alignment</label>
+        <select id="editNodeCornerType" class="form-select">
+          <option value="-|" ${parsed.cornerType === '-|' ? 'selected' : ''}>-|</option>
+          <option value="|-" ${parsed.cornerType === '|-' ? 'selected' : ''}>|-</option>
+        </select>
+      </div>` : ''}
+
       ${!isRootNode ? `<div class="form-group">
         <label class="form-label">Rotate (deg)</label>
         <input type="number" step="15" id="editCompRotate" class="form-input" value="${Number(parsed.rotate).toFixed(1)}" />
@@ -911,6 +844,7 @@ export function updateEditPanel(forceRefresh = false) {
       const location = document.getElementById('editNodeLoc')?.value.trim() || parsed.location;
       const absX = parseFloat(document.getElementById('editNodeAbsX')?.value || parsed.absX);
       const absY = parseFloat(document.getElementById('editNodeAbsY')?.value || parsed.absY);
+      const cornerType = document.getElementById('editNodeCornerType')?.value || parsed.cornerType;
       const rotate = parseFloat(document.getElementById('editCompRotate')?.value || parsed.rotate);
 
       const newLine = buildCoordLine({
@@ -921,6 +855,7 @@ export function updateEditPanel(forceRefresh = false) {
         location,
         absX,
         absY,
+        cornerType,
         rotate
       });
 
@@ -928,8 +863,9 @@ export function updateEditPanel(forceRefresh = false) {
       processLatexCode({ skipRender: false, preserveSelection: true });
     };
 
-    (isRootNode ? [] : ['editNodeName', 'editNodeXLen', 'editNodeYLen', 'editNodeLoc', 'editNodeAbsX', 'editNodeAbsY', 'editCompRotate'])
+    (isRootNode ? [] : ['editNodeName', 'editNodeXLen', 'editNodeYLen', 'editNodeLoc', 'editNodeAbsX', 'editNodeAbsY', 'editNodeCornerType', 'editCompRotate'])
       .forEach(id => document.getElementById(id)?.addEventListener('input', applyNodeChanges));
+    document.getElementById('editNodeCornerType')?.addEventListener('change', applyNodeChanges);
 
     if (canDelete) {
       document.getElementById('editNodeDeleteBtn')?.addEventListener('click', () => deleteNode(parsed.nodeName));
@@ -941,82 +877,54 @@ export function updateEditPanel(forceRefresh = false) {
 // Add Device & Node Modal Listeners
 // ---------------------------------------------------------------------
 
-export function openAddComponentModal(nodeRef = null) {
+// Both choice panels are shown together (stacked vertically) as soon as
+// one or two nodes are picked; options are greyed out based on the count.
+function showAddChoicePanels() {
   if (state.hideNodes) {
     state.hideNodes = false;
     if (dom.toggleNodesBtn) dom.toggleNodesBtn.textContent = 'Hide nodes';
     processLatexCode();
   }
   if (dom.editPanel) dom.editPanel.style.display = 'none';
-  selectComponent(null);
-  activeModalNode = nodeRef || null;
-  if (dom.modalCurrentNode) dom.modalCurrentNode.value = activeModalNode || '';
   if (dom.modalDeviceSelect) dom.modalDeviceSelect.value = '';
   if (dom.modalCurrentNodeLabel) dom.modalCurrentNodeLabel.textContent = 'Placement Node';
-  if (dom.modalChoiceStep) dom.modalChoiceStep.style.display = 'block';
+  syncNodeFieldsFromSelection();
   if (dom.modalStep1) dom.modalStep1.style.display = 'none';
   if (dom.modalAddNodeStep) dom.modalAddNodeStep.style.display = 'none';
   if (dom.addPanelsContainer) dom.addPanelsContainer.style.display = 'flex';
   if (dom.addComponentsPanel) dom.addComponentsPanel.style.display = 'block';
-  if (dom.addNodesPanel) dom.addNodesPanel.style.display = 'none';
-  if (dom.addPanel) dom.addPanel.style.display = 'none';
-  updateMainChoiceAvailability();
-}
-
-export function openAddNodeModal(nodeRef = null) {
-  if (state.hideNodes) {
-    state.hideNodes = false;
-    if (dom.toggleNodesBtn) dom.toggleNodesBtn.textContent = 'Hide nodes';
-    processLatexCode();
-  }
-  if (dom.editPanel) dom.editPanel.style.display = 'none';
-  selectComponent(null);
-  activeModalNode = nodeRef || null;
-  if (dom.addNodeCurrentNode) dom.addNodeCurrentNode.value = activeModalNode || '';
-  if (dom.modalChoiceStep) dom.modalChoiceStep.style.display = 'block';
-  if (dom.modalStep1) dom.modalStep1.style.display = 'none';
-  if (dom.modalAddNodeStep) dom.modalAddNodeStep.style.display = 'none';
-  if (dom.addPanelsContainer) dom.addPanelsContainer.style.display = 'flex';
-  if (dom.addComponentsPanel) dom.addComponentsPanel.style.display = 'none';
   if (dom.addNodesPanel) dom.addNodesPanel.style.display = 'block';
   if (dom.addPanel) dom.addPanel.style.display = 'none';
   updateMainChoiceAvailability();
 }
 
-export function openDeviceModal(nodeRef = null) {
-  openAddComponentModal(nodeRef);
+function hideAddPanels() {
+  if (dom.addPanelsContainer) dom.addPanelsContainer.style.display = 'none';
+  if (dom.addPanel) dom.addPanel.style.display = 'none';
 }
 
 export function closeDeviceModal() {
-  if (dom.addPanelsContainer) dom.addPanelsContainer.style.display = 'none';
-  if (dom.addComponentsPanel) dom.addComponentsPanel.style.display = 'block';
-  if (dom.addNodesPanel) dom.addNodesPanel.style.display = 'block';
-  if (dom.addPanel) dom.addPanel.style.display = 'none';
-  activeModalNode = null;
-  if (dom.modalCurrentNode) dom.modalCurrentNode.value = '';
-  if (dom.addNodeCurrentNode) dom.addNodeCurrentNode.value = '';
-  cancelNodeSelection();
+  if (getSelectedNodes().length > 0) {
+    showAddChoicePanels();
+  } else {
+    hideAddPanels();
+  }
 }
 
 export function initModalListeners() {
   if (dom.modalCloseBtn) dom.modalCloseBtn.addEventListener('click', closeDeviceModal);
-  document.querySelectorAll('.modal-close-btn').forEach(btn => {
-    btn.addEventListener('click', closeDeviceModal);
-  });
 
   const openComponentStep = async (style, pathMode = 'new', excludedTypes = [], title = 'Add Component') => {
     preferredPathMode = pathMode;
-    cancelNodeSelection();
     await populateComponentDropdown(style, excludedTypes);
     const selectorGroup = dom.modalDeviceSelect?.closest('.form-group');
     if (selectorGroup) selectorGroup.style.display = 'block';
     if (dom.modalTitle) dom.modalTitle.textContent = title;
     if (dom.modalAddBtn) dom.modalAddBtn.textContent = 'Add Component';
     if (dom.modalCurrentNodeLabel) dom.modalCurrentNodeLabel.textContent = style === 'path' ? 'Start Node' : 'Placement Node';
-    if (dom.modalCurrentNode) dom.modalCurrentNode.value = activeModalNode || '';
+    syncNodeFieldsFromSelection();
     if (dom.modalPlacementNodeGroup) dom.modalPlacementNodeGroup.style.display = 'none';
     if (dom.addPanelsContainer) dom.addPanelsContainer.style.display = 'none';
-    if (dom.modalChoiceStep) dom.modalChoiceStep.style.display = 'none';
     if (dom.addPanel) dom.addPanel.style.display = 'block';
     if (dom.modalStep1) dom.modalStep1.style.display = 'block';
     if (dom.modalDeviceSelect) {
@@ -1053,19 +961,19 @@ export function initModalListeners() {
 
   if (dom.modalChoiceAddPathBetweenNodesBtn) {
     dom.modalChoiceAddPathBetweenNodesBtn.addEventListener('click', () => {
-      if (hasMultipleNodes()) openComponentStep('path', 'existing', [], 'Add Directional Component (Start-End)');
+      if (hasTwoSelectedNodes()) openComponentStep('path', 'existing', [], 'Add Directional Component (Start-End)');
     });
   }
 
   if (dom.modalChoiceAddNodeBetweenBtn) {
     dom.modalChoiceAddNodeBetweenBtn.addEventListener('click', () => {
-      if (hasMultipleNodes()) openAddNodeForm('crossing', 'Between');
+      if (hasTwoSelectedNodes()) openAddNodeForm('crossing', 'Between');
     });
   }
 
   if (dom.modalChoiceAddNodeCornerBtn) {
     dom.modalChoiceAddNodeCornerBtn.addEventListener('click', () => {
-      if (hasMultipleNodes()) openAddNodeForm('crossing', 'Corner');
+      if (hasTwoSelectedNodes()) openAddNodeForm('crossing', 'Corner');
     });
   }
 
@@ -1075,42 +983,18 @@ export function initModalListeners() {
     });
   }
 
-  if (dom.modalPickCurrentNodeBtn) {
-    dom.modalPickCurrentNodeBtn.addEventListener('click', () => {
-      toggleNodeSelection('modalCurrentNode');
-    });
-  }
-
-  if (dom.addNodePickStartBtn) {
-    dom.addNodePickStartBtn.addEventListener('click', () => {
-      toggleNodeSelection('addNodeCurrentNode');
-    });
-  }
-
   if (dom.modalCompSelectBackBtn) {
     dom.modalCompSelectBackBtn.addEventListener('click', () => {
-      cancelNodeSelection();
-      if (dom.modalStep1) dom.modalStep1.style.display = 'none';
-      if (dom.addPanel) dom.addPanel.style.display = 'none';
-      if (dom.addPanelsContainer) dom.addPanelsContainer.style.display = 'flex';
-      if (dom.modalChoiceStep) dom.modalChoiceStep.style.display = 'block';
+      showAddChoicePanels();
     });
   }
 
   dom.modalDeviceSelect.addEventListener('change', updateComponentFields);
   dom.modalAddBtn.addEventListener('click', handleModalAdd);
 
-  if (dom.addNodePickBtn) {
-    dom.addNodePickBtn.addEventListener('click', () => toggleNodeSelection('addNodeRef2'));
-  }
-
   if (dom.addNodeBackBtn) {
     dom.addNodeBackBtn.addEventListener('click', () => {
-      cancelNodeSelection();
-      if (dom.modalAddNodeStep) dom.modalAddNodeStep.style.display = 'none';
-      if (dom.addPanel) dom.addPanel.style.display = 'none';
-      if (dom.addPanelsContainer) dom.addPanelsContainer.style.display = 'flex';
-      if (dom.modalChoiceStep) dom.modalChoiceStep.style.display = 'block';
+      showAddChoicePanels();
     });
   }
 
@@ -1122,26 +1006,16 @@ export function initModalListeners() {
 function openAddNodeForm(mode = 'simple', nodeType = 'Between') {
   activeNodeMode = mode;
   activeNodeType = nodeType;
-  cancelNodeSelection();
   if (dom.addPanelsContainer) dom.addPanelsContainer.style.display = 'none';
-  if (dom.modalChoiceStep) dom.modalChoiceStep.style.display = 'none';
   if (dom.addPanel) dom.addPanel.style.display = 'block';
   dom.modalStep1.style.display = 'none';
   dom.modalAddNodeStep.style.display = 'block';
-  if (dom.addNodeCurrentNode) dom.addNodeCurrentNode.value = activeModalNode || '';
+  syncNodeFieldsFromSelection();
 
   const title = mode === 'simple' ? 'Add Directional Node' : nodeType === 'Between' ? 'Add Line Segment Node' : 'Add Corner Intersection Node';
   if (dom.modalTitle) dom.modalTitle.textContent = title;
   if (dom.addNodeSubmitBtn) dom.addNodeSubmitBtn.textContent = 'Add Node';
 
-  if (dom.addNodeRef2Input) {
-    dom.addNodeRef2Input.value = '';
-    dom.addNodeRef2Input.placeholder = 'No node selected';
-  }
-  if (dom.addNodePickBtn) {
-    dom.addNodePickBtn.disabled = !hasMultipleNodes();
-    dom.addNodePickBtn.title = hasMultipleNodes() ? 'Pick another node' : 'At least two nodes are required';
-  }
   dom.addNodeXLength.value = '2';
   dom.addNodeYLength.value = '-2';
   dom.addNodeLocation.value = '0.5';
@@ -1171,22 +1045,17 @@ function updateAddNodeFormVisibility() {
 }
 
 function handleAddNodeSubmit() {
-  const ref1 = dom.addNodeCurrentNode?.value.trim() || activeModalNode;
+  const [ref1, ref2 = ''] = getSelectedNodes();
   if (!ref1) {
-    alert('Please select a Start Node.');
+    alert('Please select a Start Node on the circuit.');
     return;
   }
 
   const maxId = state.parsedData?.maxNodeId || 0;
   const newNodeName = `N${maxId + 1}`;
 
-  const ref2 = dom.addNodeRef2Input.value.trim();
-  if (activeNodeMode === 'crossing' && !hasMultipleNodes()) {
-    alert('At least two nodes are required to add a Line Segment or Corner Intersection node.');
-    return;
-  }
   if (activeNodeMode === 'crossing' && !ref2) {
-    alert('Please select the End Node for the Line Segment or Corner Intersection node.');
+    alert('Please select an End Node on the circuit for the Line Segment or Corner Intersection node.');
     return;
   }
 
@@ -1214,6 +1083,7 @@ function handleAddNodeSubmit() {
   }
 
   insertCircuitLine(line);
+  clearSelectedNodes();
   closeDeviceModal();
   processLatexCode();
 }
@@ -1244,10 +1114,7 @@ function updateComponentFields() {
     const targetFields = preferredPathMode === 'existing'
       ? `<div class="form-group">
           <label class="form-label">End Node</label>
-          <div class="node-choice-row">
-            <button id="modalPickTargetNodeBtn" class="form-btn node-choice-btn" type="button" ${hasMultipleNodes() ? '' : 'disabled'}>Pick Node</button>
-          </div>
-          <input type="text" id="modalTargetNodeInput" class="form-input node-target-input" readonly placeholder="No node selected" />
+          <input type="text" id="modalTargetNodeInput" class="form-input node-target-input" readonly placeholder="No node selected" value="${getSelectedNodes()[1] || ''}" />
         </div>`
       : `<div id="modalNewNodeFields">
         <div class="form-group">
@@ -1287,17 +1154,6 @@ function updateComponentFields() {
   }
 
   dom.modalStep2Fields.innerHTML = fieldsHtml;
-
-  // Bind pick buttons if they were rendered inside step2Fields
-  const pickCurrentBtn = dom.modalStep2Fields.querySelector('#modalPickCurrentNodeBtn');
-  if (pickCurrentBtn) {
-    pickCurrentBtn.addEventListener('click', () => toggleNodeSelection('modalCurrentNode'));
-  }
-
-  const pickTargetNodeBtn = document.getElementById('modalPickTargetNodeBtn');
-  if (pickTargetNodeBtn) {
-    pickTargetNodeBtn.addEventListener('click', () => toggleNodeSelection('modalTargetNode'));
-  }
 }
 
 function handleModalAdd() {
@@ -1305,9 +1161,9 @@ function handleModalAdd() {
   const config = getComponentsConfig()[type] || (type === 'text' ? { style: 'node', isText: true } : null);
   if (!type || !config) return;
 
-  const start = dom.modalCurrentNode?.value.trim() || activeModalNode;
+  const start = getSelectedNodes()[0];
   if (!start) {
-    alert(config.style === 'path' ? 'Please select a Start Node.' : 'Please select a Placement Node.');
+    alert(config.style === 'path' ? 'Please select a Start Node on the circuit.' : 'Please select a Placement Node on the circuit.');
     return;
   }
 
@@ -1320,11 +1176,7 @@ function handleModalAdd() {
     const labelArg = ',l^=\\normalsize{}';
 
     if (preferredPathMode === 'existing' && targetVal === '__NEW__') {
-      alert('Please select an existing end node.');
-      return;
-    }
-    if (preferredPathMode === 'existing' && !hasMultipleNodes()) {
-      alert('At least two nodes are required to add a Directional Component (Start-End).');
+      alert('Please select an existing end node on the circuit.');
       return;
     }
 
@@ -1347,6 +1199,7 @@ function handleModalAdd() {
       insertCircuitLine(newLine);
     }
 
+    clearSelectedNodes();
     closeDeviceModal();
     processLatexCode();
   } else if (config.style === 'node') {
@@ -1369,6 +1222,7 @@ function handleModalAdd() {
         : `${config.symbol}${extraArgs}, color=coloring, anchor=${anchor}, label=above:\\normalsize{}`;
       const newLine = `\\begin{scope}[transform shape, xscale=1.0, yscale=1.0, rotate=0] \\draw [coloring] (${start}) node[${nodeOptions}] (${compName}) {}; \\end{scope}`;
       insertCircuitLine(newLine);
+      clearSelectedNodes();
       closeDeviceModal();
       processLatexCode();
     };

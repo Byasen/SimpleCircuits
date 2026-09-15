@@ -2,14 +2,13 @@ import { state } from './state.js';
 import { render } from './render.js';
 import { populateComponentDropdown, loadComponentsConfig } from './tikz.js';
 import { processLatexCode, initializeTexHistory, recordTexEdit, undoTexEdit, redoTexEdit, loadSavedTexCode, saveTexCode } from './latex.js';
-import { selectComponent, initModalListeners, openAddComponentModal, openAddNodeModal, closeDeviceModal } from './handlers.js';
+import { selectComponent, initModalListeners, closeDeviceModal, clearSelectedNodes } from './handlers.js';
+import { clearTooltips } from './interactive.js';
 
 export const dom = {
   scratchpad: document.getElementById('scratchpad'),
   latexInput: document.getElementById('latexInput'),
   output: document.getElementById('output'),
-  addComponentBtn: document.getElementById('addComponentBtn'),
-  addNodeBtn: document.getElementById('addNodeBtn'),
   downloadBtn: document.getElementById('downloadBtn'),
   toggleNodesBtn: document.getElementById('toggleNodesBtn'),
   copyTexBtn: document.getElementById('copyTexBtn'),
@@ -27,7 +26,6 @@ export const dom = {
   modalStep2Fields: document.getElementById('modalStep2Fields'),
   modalCurrentNodeLabel: document.getElementById('modalCurrentNodeLabel'),
   modalCurrentNode: document.getElementById('modalCurrentNode'),
-  modalPickCurrentNodeBtn: document.getElementById('modalPickCurrentNodeBtn'),
   modalAddBtn: document.getElementById('modalAddBtn'),
   modalCloseBtn: document.getElementById('modalCloseBtn'),
   modalChoiceStep: document.getElementById('modalChoiceStep'),
@@ -41,10 +39,8 @@ export const dom = {
   modalCompSelectBackBtn: document.getElementById('modalCompSelectBackBtn'),
   modalAddNodeStep: document.getElementById('modalAddNodeStep'),
   addNodeCurrentNode: document.getElementById('addNodeCurrentNode'),
-  addNodePickStartBtn: document.getElementById('addNodePickStartBtn'),
   addNodeRef2Group: document.getElementById('addNodeRef2Group'),
   addNodeRef2Input: document.getElementById('addNodeRef2Input'),
-  addNodePickBtn: document.getElementById('addNodePickBtn'),
   addNode1NodeFields: document.getElementById('addNode1NodeFields'),
   addNode2NodesFields: document.getElementById('addNode2NodesFields'),
   addNodeBetweenFields: document.getElementById('addNodeBetweenFields'),
@@ -206,19 +202,11 @@ async function init() {
     dom.editPanelCloseBtn.addEventListener('click', () => selectComponent(null));
   }
 
-  dom.addComponentBtn?.addEventListener('click', () => {
-    if (dom.addPanelsContainer?.style.display === 'flex' && dom.addComponentsPanel?.style.display !== 'none') {
-      closeDeviceModal();
-    } else {
-      openAddComponentModal();
-    }
-  });
-
-  dom.addNodeBtn?.addEventListener('click', () => {
-    if (dom.addPanelsContainer?.style.display === 'flex' && dom.addNodesPanel?.style.display !== 'none') {
-      closeDeviceModal();
-    } else {
-      openAddNodeModal();
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      clearTooltips();
+      selectComponent(null);
+      clearSelectedNodes();
     }
   });
 

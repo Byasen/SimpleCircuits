@@ -434,3 +434,35 @@ html, body {
   background: var(--accent-primary);
   color: var(--page-background);
 }
+
+/* Fast-appearing tooltip for disabled add-panel buttons (native title is too slow) */
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%) translateY(-2px);
+  background: var(--primary-text);
+  color: var(--panel-background);
+  font-size: 11px;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px var(--tooltip-shadow);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.05s linear, transform 0.05s linear;
+  transition-delay: 0s;
+  z-index: 60;
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}

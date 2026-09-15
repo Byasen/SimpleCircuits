@@ -28,13 +28,12 @@
         <div id="addComponentsPanel" class="add-panel">
           <div class="add-panel-header">
             <span>Add Components to Circuit</span>
-            <button class="modal-close modal-close-btn">&times;</button>
           </div>
           <div class="add-panel-body">
             <button id="modalChoiceAddNodeComponentBtn" class="form-btn">Block Component</button>
             <button id="modalChoiceAddPathNewNodeBtn" class="form-btn">Directional Component</button>
-            <button id="modalChoiceAddPathBetweenNodesBtn" class="form-btn">Directional Component<br>(Start-End)</button>
             <button id="modalChoiceAddTextComponentBtn" class="form-btn">Text Component</button>
+            <button id="modalChoiceAddPathBetweenNodesBtn" class="form-btn">Directional Component<br>(Start-End)</button>
           </div>
         </div>
 
@@ -42,7 +41,6 @@
         <div id="addNodesPanel" class="add-panel">
           <div class="add-panel-header">
             <span>Add Nodes to Circuit</span>
-            <button class="modal-close modal-close-btn">&times;</button>
           </div>
           <div class="add-panel-body">
             <button id="modalChoiceAddSimpleNodeBtn" class="form-btn">Directional Node</button>
@@ -69,9 +67,6 @@
           </div>
           <div id="modalPlacementNodeGroup" class="form-group" style="display: none;">
             <label id="modalCurrentNodeLabel" class="form-label">Placement Node</label>
-            <div class="node-choice-row">
-              <button id="modalPickCurrentNodeBtn" class="form-btn node-choice-btn" type="button">Pick Node</button>
-            </div>
             <input type="text" id="modalCurrentNode" class="form-input node-target-input" readonly placeholder="No node selected" />
           </div>
           <div id="modalStep2Fields"></div>
@@ -85,16 +80,10 @@
         <div id="modalAddNodeStep" class="add-panel-step" style="display: none;">
           <div class="form-group">
             <label class="form-label">Start Node</label>
-            <div class="node-choice-row">
-              <button id="addNodePickStartBtn" class="form-btn node-choice-btn" type="button">Pick Node</button>
-            </div>
             <input type="text" id="addNodeCurrentNode" class="form-input node-target-input" readonly placeholder="No node selected" />
           </div>
           <div id="addNodeRef2Group" class="form-group">
             <label class="form-label">End Node</label>
-            <div class="node-choice-row">
-              <button id="addNodePickBtn" class="form-btn node-choice-btn" type="button">Pick Node</button>
-            </div>
             <input type="text" id="addNodeRef2Input" class="form-input node-target-input" readonly placeholder="No node selected" />
           </div>
 
@@ -147,10 +136,6 @@
       </div>
 
       <div class="preview-toolbar" aria-label="Circuit actions">
-        <div class="toolbar-group">
-          <button id="addComponentBtn" class="toolbar-btn" type="button">Add Component</button>
-          <button id="addNodeBtn" class="toolbar-btn" type="button">Add Node</button>
-        </div>
         <div class="toolbar-group">
           <button id="copyTexBtn" class="toolbar-btn" type="button">Copy TeX</button>
           <button id="undoBtn" class="toolbar-btn" type="button" disabled>Undo</button>

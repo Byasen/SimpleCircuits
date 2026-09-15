@@ -153,7 +153,9 @@ export function renderCircuit(onRendered) {
       onRendered(svg);
       setTimeout(() => {
         const latestSvg = dom.output.querySelector('svg:not(.tikzjax-loader)');
-        if (latestSvg) onRendered(latestSvg);
+        // Only re-run setup if TikZJax swapped in a new element, otherwise
+        // this would double-bind click handlers and break selection toggles.
+        if (latestSvg && latestSvg !== svg) onRendered(latestSvg);
       }, 200);
       return;
     }

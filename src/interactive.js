@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { dom } from './main.js';
-import { isSelectingSecondNode, selectComponent, selectSecondNode } from './handlers.js';
+import { selectComponent, toggleSelectedNode, clearSelectedNodes, isActionableElement } from './handlers.js';
 
 const GOLDEN_COLOR = '#e3b768';
 const GOLDEN_BORDER = '#c9973f';
@@ -78,15 +78,64 @@ function showTooltips(nodeTooltip, options, event, frozen = false) {
     tooltip.addEventListener('click', clickEvent => {
       clickEvent.stopPropagation();
       clickEvent.preventDefault();
-      if (isSelectingSecondNode()) {
-        selectSecondNode(option.nodeRef);
-      } else {
-        selectComponent(option.colorKey);
-      }
-      clearTooltips();
+      resolveNodeSelection(nodeTooltip, option, clickEvent);
     });
     nodeTooltip.appendChild(tooltip);
   });
+
+  nodeTooltip.style.left = `${event.clientX + 8}px`;
+  nodeTooltip.style.top = `${event.clientY + 8}px`;
+  nodeTooltip.style.display = 'flex';
+}
+
+// Pick = blue "add flow" selection, Edit = gold component-edit selection.
+function pickNode(nodeRef) {
+  selectComponent(null);
+  toggleSelectedNode(nodeRef);
+}
+
+function editNode(colorKey) {
+  clearSelectedNodes();
+  selectComponent(colorKey);
+}
+
+// Actionable nodes let the user choose Edit vs Pick; others are pick-only.
+function resolveNodeSelection(nodeTooltip, nodeOption, event) {
+  if (!nodeOption?.nodeRef) return;
+  if (isActionableElement(nodeOption.colorKey)) {
+    showActionTooltip(nodeTooltip, nodeOption, event);
+  } else {
+    pickNode(nodeOption.nodeRef);
+    clearTooltips();
+  }
+}
+
+function showActionTooltip(nodeTooltip, nodeOption, event) {
+  if (!nodeTooltip) return;
+  if (tooltipHideTimer) {
+    clearTimeout(tooltipHideTimer);
+    tooltipHideTimer = null;
+  }
+
+  nodeTooltip.dataset.frozen = 'true';
+  nodeTooltip.replaceChildren();
+
+  const addOption = (label, onSelect) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'node-tooltip-option';
+    btn.textContent = label;
+    btn.addEventListener('click', clickEvent => {
+      clickEvent.stopPropagation();
+      clickEvent.preventDefault();
+      onSelect();
+      clearTooltips();
+    });
+    nodeTooltip.appendChild(btn);
+  };
+
+  addOption('Pick', () => pickNode(nodeOption.nodeRef));
+  addOption('Edit', () => editNode(nodeOption.colorKey));
 
   nodeTooltip.style.left = `${event.clientX + 8}px`;
   nodeTooltip.style.top = `${event.clientY + 8}px`;
@@ -128,6 +177,7 @@ export function setupInteractiveSvg(svg) {
     if (e.target === svg || e.target.tagName.toLowerCase() === 'svg') {
       clearTooltips();
       selectComponent(null);
+      clearSelectedNodes();
     }
   };
 
@@ -278,7 +328,7 @@ export function setupInteractiveSvg(svg) {
 
       // Hover feedback directly on the element
       el.addEventListener('mouseenter', () => {
-        if (el.dataset.selected === 'true') return;
+        if (el.dataset.selected === 'true' || el.dataset.pickedNode === 'true') return;
         if (el.dataset.hasStroke === 'true') el.style.stroke = GOLDEN_COLOR;
         if (el.dataset.hasFill === 'true') {
           el.style.fill = GOLDEN_COLOR;
@@ -288,7 +338,7 @@ export function setupInteractiveSvg(svg) {
       });
 
       el.addEventListener('mouseleave', () => {
-        if (el.dataset.selected === 'true') return;
+        if (el.dataset.selected === 'true' || el.dataset.pickedNode === 'true') return;
         const revertColor = el.dataset.displayColor ? `#${el.dataset.displayColor}` : '';
         if (el.dataset.hasStroke === 'true') el.style.stroke = revertColor;
         if (el.dataset.hasFill === 'true') {
@@ -302,22 +352,25 @@ export function setupInteractiveSvg(svg) {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        if (e.secondNodeSelectionHandled) return;
         const options = getTooltipOptionsAtPoint(svg, e, colorToMeta);
         const defaultLabel = meta.label ? `${meta.nodeRef} (${meta.label})` : meta.nodeRef;
         const activeColorKey = meta.color || colorKey;
 
-        // If there are multiple overlapping nodes, freeze tooltip to let user choose
+        // Multiple overlapping nodes - let the user choose which node first.
         if (options.length > 1) {
           showTooltips(nodeTooltip, options, e, true);
           return;
         }
 
-        if (isSelectingSecondNode()) {
-          e.secondNodeSelectionHandled = true;
-          const option = options[0] || { nodeRef: meta.nodeRef, colorKey: activeColorKey, label: defaultLabel };
-          selectSecondNode(option.nodeRef);
-          clearTooltips();
+        // Prefer the clicked element's own node (works for non-actionable
+        // nodes too); fall back to the point scan when a component's hit
+        // area is on top of the node.
+        const nodeOption = meta.nodeRef
+          ? { nodeRef: meta.nodeRef, colorKey: activeColorKey, label: defaultLabel }
+          : options[0] || null;
+
+        if (nodeOption) {
+          resolveNodeSelection(nodeTooltip, nodeOption, e);
           return;
         }
 
@@ -353,6 +406,43 @@ export function setupInteractiveSvg(svg) {
   if (state.selectedComponentColor) {
     applySelectionHighlight(state.selectedComponentColor);
   }
+  applySelectedNodesHighlight();
+}
+
+const NODE_PICK_COLOR = '#2f6fed';
+const NODE_PICK_BORDER = '#1d4fc4';
+const NODE_PICK_GLOW = 'drop-shadow(0 0 5px #2f6fed)';
+
+export function applySelectedNodesHighlight() {
+  const container = dom.output || document;
+  const selected = state.selectedNodes || [];
+
+  container.querySelectorAll('[data-node-ref]').forEach(el => {
+    const nodeRef = el.getAttribute('data-node-ref');
+    const isPicked = selected.includes(nodeRef);
+    el.dataset.pickedNode = isPicked ? 'true' : 'false';
+
+    if (isPicked) {
+      if (el.dataset.hasStroke === 'true') {
+        el.style.stroke = NODE_PICK_BORDER;
+        el.style.strokeWidth = '2.5';
+      }
+      if (el.dataset.hasFill === 'true') {
+        el.style.fill = NODE_PICK_COLOR;
+        el.style.fillOpacity = '1.0';
+      }
+      el.style.filter = NODE_PICK_GLOW;
+    } else if (el.dataset.selected !== 'true') {
+      const revertColor = el.dataset.displayColor ? `#${el.dataset.displayColor}` : '';
+      if (el.dataset.hasStroke === 'true') el.style.stroke = revertColor;
+      if (el.dataset.hasFill === 'true') {
+        el.style.fill = revertColor;
+        el.style.fillOpacity = revertColor ? '1.0' : '';
+      }
+      el.style.strokeWidth = '';
+      el.style.filter = '';
+    }
+  });
 }
 
 export function applySelectionHighlight(selectedColorKey) {
@@ -361,6 +451,7 @@ export function applySelectionHighlight(selectedColorKey) {
   // Clear previous selection highlights from paths and reset to displayColor
   container.querySelectorAll('[data-color-key]').forEach(el => {
     el.dataset.selected = 'false';
+    if (el.dataset.pickedNode === 'true') return;
     const revertColor = el.dataset.displayColor ? `#${el.dataset.displayColor}` : '';
     el.style.stroke = el.dataset.hasStroke === 'true' ? revertColor : '';
     el.style.fill = el.dataset.hasFill === 'true' ? revertColor : '';
@@ -400,6 +491,7 @@ export function applySelectionHighlight(selectedColorKey) {
 
   // Apply golden selection highlight directly to target SVG elements
   container.querySelectorAll('[data-color-key]').forEach(el => {
+    if (el.dataset.pickedNode === 'true') return;
     const elColorKey = el.getAttribute('data-color-key');
     const elNodeRef = el.getAttribute('data-node-ref');
 

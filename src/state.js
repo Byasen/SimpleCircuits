@@ -2,6 +2,7 @@ export const CENTER = { x: 1200, y: 800 };
 
 export const state = {
   selectedComponentColor: null,
+  selectedNodes: [],
   colorMap: {},
   componentCache: {},
   latexSource: '',
@@ -20,6 +21,7 @@ export const state = {
 
 export function resetState() {
   state.selectedComponentColor = null;
+  state.selectedNodes = [];
   state.colorMap = {};
   state.componentCache = {};
   state.latexSource = '';
