@@ -105,12 +105,10 @@ html, body {
   position: relative;
 }
 
-#output svg {
-  color: var(--canvas-ink);
-}
-
+#output svg,
 #output svg text {
-  fill: var(--canvas-ink);
+  color: var(--canvas-ink) !important;
+  fill: var(--canvas-ink) !important;
 }
 
 #output svg .component-hit-area {

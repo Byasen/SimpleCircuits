@@ -252,9 +252,9 @@ export function parseLatex(texString) {
         if (nId > maxNodeId) maxNodeId = nId;
       }
 
-      const betweenMatch = expr.match(/\$\s*\(?\s*([a-zA-Z0-9_\.]+)\)?\s*!\s*([^!]+)\s*!\s*\(?\s*([a-zA-Z0-9_\.]+)\)?\s*\$/);
+      const betweenMatch = expr.match(/\$\s*\(?\s*([a-zA-Z0-9_\.\+-]+)\)?\s*!\s*([^!]+)\s*!\s*\(?\s*([a-zA-Z0-9_\.\+-]+)\)?\s*\$/);
       const calcMatch = expr.match(/\$\s*\(([^)]+)\)\s*\+\s*\(([^)]+)\)\s*\$/);
-      const cornerMatch = expr.match(/\(?\s*([a-zA-Z0-9_\.]+)\s*(\-\||\|-)\s*([a-zA-Z0-9_\.]+)\s*\)?/);
+      const cornerMatch = expr.match(/\(?\s*([a-zA-Z0-9_\.\+-]+)\s*(\-\||\|-)\s*([a-zA-Z0-9_\.\+-]+)\s*\)?/);
 
       let xVal = CENTER.x, yVal = CENTER.y;
 

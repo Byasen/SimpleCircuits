@@ -427,9 +427,9 @@ function parseTeXLine(lineText) {
   }
 
   if (nodeName && expr) {
-    const betweenMatch = expr.match(/\$\s*\(?\s*([a-zA-Z0-9_\.]+)\)?\s*!\s*([^!]+)\s*!\s*\(?\s*([a-zA-Z0-9_\.]+)\)?\s*\$/);
+    const betweenMatch = expr.match(/\$\s*\(?\s*([a-zA-Z0-9_\.\+-]+)\)?\s*!\s*([^!]+)\s*!\s*\(?\s*([a-zA-Z0-9_\.\+-]+)\)?\s*\$/);
     const calcMatch = expr.match(/\$\s*\(([^)]+)\)\s*\+\s*\(([^)]+)\)\s*\$/);
-    const cornerMatch = expr.match(/\(?\s*([a-zA-Z0-9_\.]+)\s*(\-\||\|-)\s*([a-zA-Z0-9_\.]+)\s*\)?/);
+    const cornerMatch = expr.match(/\(?\s*([a-zA-Z0-9_\.\+-]+)\s*(\-\||\|-)\s*([a-zA-Z0-9_\.\+-]+)\s*\)?/);
 
     let mode = 'absolute';
     let ref1 = '', ref2 = '', xlen = 2.0, ylen = 0.0, location = '0.5', cornerType = '-|', absX = 0, absY = 0;
@@ -542,6 +542,95 @@ function buildCoordLine(p) {
 }
 
 // ---------------------------------------------------------------------
+// TeX source line highlight
+// Shows a translucent band over whichever line in the code textarea
+// corresponds to the currently selected component/node. Implemented as
+// a pointer-events:none overlay layered on top of the textarea so it
+// works regardless of theme/colors and never intercepts clicks or typing.
+// ---------------------------------------------------------------------
+
+let texHighlightWrapper = null;
+let texHighlightMarker = null;
+let texHighlightLine = null;
+let texHighlightListenersBound = false;
+
+function ensureTexHighlightLayer() {
+  if (texHighlightWrapper) return true;
+  const textarea = dom.latexInput;
+  if (!textarea || !textarea.parentNode) return false;
+
+  const parent = textarea.parentNode;
+  if (getComputedStyle(parent).position === 'static') {
+    parent.style.position = 'relative';
+  }
+
+  const wrapper = document.createElement('div');
+  wrapper.setAttribute('aria-hidden', 'true');
+  wrapper.className = 'tex-line-highlight-layer';
+  wrapper.style.position = 'absolute';
+  wrapper.style.pointerEvents = 'none';
+  wrapper.style.overflow = 'hidden';
+  wrapper.style.zIndex = '5';
+
+  const marker = document.createElement('div');
+  marker.style.position = 'absolute';
+  marker.style.left = '0';
+  marker.style.right = '0';
+  marker.style.background = 'rgba(255, 202, 40, 0.28)';
+  marker.style.display = 'none';
+  wrapper.appendChild(marker);
+
+  parent.appendChild(wrapper);
+
+  texHighlightWrapper = wrapper;
+  texHighlightMarker = marker;
+
+  if (!texHighlightListenersBound) {
+    textarea.addEventListener('scroll', positionTexHighlight);
+    window.addEventListener('resize', positionTexHighlight);
+    texHighlightListenersBound = true;
+  }
+
+  return true;
+}
+
+function positionTexHighlight() {
+  if (!texHighlightWrapper) return;
+  const textarea = dom.latexInput;
+  if (!textarea) return;
+
+  texHighlightWrapper.style.top = `${textarea.offsetTop}px`;
+  texHighlightWrapper.style.left = `${textarea.offsetLeft}px`;
+  texHighlightWrapper.style.width = `${textarea.offsetWidth}px`;
+  texHighlightWrapper.style.height = `${textarea.offsetHeight}px`;
+
+  if (texHighlightLine === null) {
+    texHighlightMarker.style.display = 'none';
+    return;
+  }
+
+  const style = getComputedStyle(textarea);
+  const paddingTop = parseFloat(style.paddingTop) || 0;
+  let lineHeight = parseFloat(style.lineHeight);
+  if (isNaN(lineHeight)) {
+    lineHeight = (parseFloat(style.fontSize) || 14) * 1.2;
+  }
+
+  const top = paddingTop + texHighlightLine * lineHeight - textarea.scrollTop;
+  texHighlightMarker.style.top = `${top}px`;
+  texHighlightMarker.style.height = `${lineHeight}px`;
+  texHighlightMarker.style.display = 'block';
+}
+
+// Highlights the given 0-based line index in the tex textarea, or clears
+// the highlight when passed null/undefined.
+export function highlightTexLine(lineIndex) {
+  texHighlightLine = (typeof lineIndex === 'number' && !isNaN(lineIndex)) ? lineIndex : null;
+  if (!ensureTexHighlightLayer()) return;
+  positionTexHighlight();
+}
+
+// ---------------------------------------------------------------------
 // Unified Edit Panel UI
 // ---------------------------------------------------------------------
 
@@ -551,6 +640,7 @@ export function updateEditPanel(forceRefresh = false) {
   if (!state.selectedComponentColor) {
     dom.editPanel.style.display = 'none';
     dom.editPanelBody.innerHTML = '';
+    highlightTexLine(null);
     return;
   }
 
@@ -568,6 +658,7 @@ export function updateEditPanel(forceRefresh = false) {
         <input type="text" class="form-input" value="${targetNodeRef}" readonly />
       </div>
     `;
+    highlightTexLine(null);
     return;
   }
 
@@ -582,8 +673,11 @@ export function updateEditPanel(forceRefresh = false) {
     dom.editPanel.style.display = 'block';
     if (dom.editPanelTitle) dom.editPanelTitle.textContent = 'Edit Node';
     dom.editPanelBody.innerHTML = '';
+    highlightTexLine(null);
     return;
   }
+
+  highlightTexLine(lineIndex);
 
   if (!forceRefresh && dom.editPanelBody.contains(document.activeElement)) {
     return;
