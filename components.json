@@ -73,11 +73,11 @@
   },
   "dc_voltage_source": {
     "style": "path",
-    "symbol": "vsourceDC"
+    "symbol": "vsource"
   },
   "dc_current_source": {
     "style": "path",
-    "symbol": "isourceDC"
+    "symbol": "isource"
   },
   "ac_voltage_source": {
     "style": "path",
