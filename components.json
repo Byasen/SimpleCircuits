@@ -414,5 +414,21 @@
     "terminals": [
       { "name": "space" }
     ]
+  },
+  "circle": {
+    "style": "node",
+    "symbol": "circle",
+    "args": "draw, minimum size=8mm",
+    "terminals": [
+      { "name": "center", "displayName": "center" }
+    ]
+  },
+  "square": {
+    "style": "node",
+    "symbol": "rectangle",
+    "args": "draw, minimum size=8mm",
+    "terminals": [
+      { "name": "center", "displayName": "center" }
+    ]
   }
 }
