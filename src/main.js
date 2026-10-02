@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { render } from './render.js';
 import { populateComponentDropdown, loadComponentsConfig } from './tikz.js';
-import { processLatexCode, initializeTexHistory, recordTexEdit, undoTexEdit, redoTexEdit, loadSavedTexCode, saveTexCode } from './latex.js';
+import { processLatexCode, initializeTexHistory, recordTexEdit, undoTexEdit, redoTexEdit, loadSavedTexCode, saveTexCode, COLOR_PREFIX_RE } from './latex.js';
 import { selectComponent, initModalListeners, closeDeviceModal, clearSelectedNodes } from './handlers.js';
 import { clearTooltips } from './interactive.js';
 
@@ -10,6 +10,7 @@ export const dom = {
   latexInput: document.getElementById('latexInput'),
   output: document.getElementById('output'),
   downloadBtn: document.getElementById('downloadBtn'),
+  downloadMarkedBtn: document.getElementById('downloadMarkedBtn'),
   toggleNodesBtn: document.getElementById('toggleNodesBtn'),
   copyTexBtn: document.getElementById('copyTexBtn'),
   clearAllBtn: document.getElementById('clearAllBtn'),
@@ -93,6 +94,21 @@ function prepareExportSource(source) {
   ${visibleCode}
 \\end{circuitikz}
 \\end{document}`;
+}
+
+// Replaces each line's user-chosen \definecolor{coloring}{HTML}{...} with a sequential
+// hex marker (000000, 000001, ...) so each colored line gets a unique, predictable color.
+function markColorsSequentially(source) {
+  let counter = 0;
+  return source
+    .split('\n')
+    .map(line => {
+      if (!COLOR_PREFIX_RE.test(line)) return line;
+      const hex = counter.toString(16).padStart(6, '0');
+      counter += 1;
+      return line.replace(COLOR_PREFIX_RE, `\\definecolor{coloring}{HTML}{${hex}}`);
+    })
+    .join('\n');
 }
 
 function downloadTextFile(content, filename) {
@@ -258,6 +274,12 @@ async function init() {
       const textContent = dom.latexInput.value || state.latexSource || '';
       downloadTextFile(textContent, 'display.tex');
     }
+  });
+
+  dom.downloadMarkedBtn?.addEventListener('click', () => {
+    const source = dom.latexInput.value || state.latexSource || '';
+    const markedSource = markColorsSequentially(source);
+    downloadTextFile(markedSource, 'circuit-marked.tex');
   });
 
   dom.copyTexBtn?.addEventListener('click', async () => {
