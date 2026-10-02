@@ -130,6 +130,13 @@
       { "name": "north", "displayName": "gnd" }
     ]
   },
+  "tground": {
+    "style": "node",
+    "symbol": "tground",
+    "terminals": [
+      { "name": "north", "displayName": "gnd" }
+    ]
+  },  
   "tlground": {
     "style": "node",
     "symbol": "tlground",
